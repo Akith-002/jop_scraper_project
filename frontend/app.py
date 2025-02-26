@@ -2,7 +2,7 @@
 import streamlit as st
 import requests
 import pandas as pd
-import time
+import json
 import plotly.express as px
 
 # Page configuration
@@ -16,7 +16,7 @@ st.set_page_config(
 API_URL = "http://localhost:5000/api"
 
 def main():
-    st.title("🔍 Job Listings Scraper")
+    st.title("🔍 Job Listings Scraper with AI Insights")
     
     # Sidebar for search options
     with st.sidebar:
@@ -40,11 +40,20 @@ def main():
         if glassdoor:
             sources.append("glassdoor")
         
+        # AI Features section
+        st.subheader("AI Assistant")
+        st.write("Share your profile for personalized recommendations:")
+        user_skills = st.text_area("Your Skills", "Python, SQL, Data Analysis")
+        user_experience = st.select_slider(
+            "Experience Level",
+            options=["Entry-level", "Mid-level", "Senior", "Leadership"]
+        )
+        
         # Search button
         search_button = st.button("Search Jobs")
     
     # Main content area
-    tabs = st.tabs(["Search Results", "Analytics", "About"])
+    tabs = st.tabs(["Search Results", "AI Insights", "Analytics", "About"])
     
     # Search Results Tab
     with tabs[0]:
@@ -81,13 +90,89 @@ def main():
                                 with cols[1]:
                                     st.markdown(f"**Source:** {job['source']}")
                                     st.link_button("View Job", job['url'])
+                                    
+                                    # AI analysis buttons
+                                    if st.button("✨ AI Analysis", key=f"analyze_{job['id']}"):
+                                        with st.spinner("Analyzing job..."):
+                                            analysis_response = requests.post(
+                                                f"{API_URL}/analyze", 
+                                                json={"job_id": job['id']}
+                                            )
+                                            if analysis_response.status_code == 200:
+                                                analysis_data = analysis_response.json()
+                                                st.json(analysis_data["analysis"])
+                                            else:
+                                                st.error("Failed to analyze job")
+                                    
+                                    if st.button("📝 Quick Summary", key=f"summary_{job['id']}"):
+                                        with st.spinner("Generating summary..."):
+                                            summary_response = requests.post(
+                                                f"{API_URL}/summarize", 
+                                                json={"job_id": job['id']}
+                                            )
+                                            if summary_response.status_code == 200:
+                                                summary_data = summary_response.json()
+                                                st.write(summary_data["summary"])
+                                            else:
+                                                st.error("Failed to summarize job")
                     else:
                         st.error(f"Error: {response.status_code} - {response.text}")
                 except Exception as e:
                     st.error(f"Error connecting to backend: {e}")
     
-    # Analytics Tab
+    # AI Insights Tab
     with tabs[1]:
+        st.header("AI-Powered Insights")
+        
+        insights_tab1, insights_tab2 = st.tabs(["Job Market Insights", "Personalized Recommendations"])
+        
+        with insights_tab1:
+            if st.button("Generate Market Insights"):
+                with st.spinner("Analyzing job market data..."):
+                    try:
+                        insights_response = requests.get(f"{API_URL}/insights")
+                        if insights_response.status_code == 200:
+                            insights_data = insights_response.json()
+                            st.markdown("### Job Market Trends")
+                            st.write(insights_data["insights"])
+                        else:
+                            st.error("Failed to generate insights")
+                    except Exception as e:
+                        st.error(f"Error connecting to backend: {e}")
+        
+        with insights_tab2:
+            if st.button("Get Personalized Job Recommendations"):
+                with st.spinner("Finding the best matches for your profile..."):
+                    try:
+                        payload = {
+                            "skills": user_skills,
+                            "experience": user_experience
+                        }
+                        
+                        recommendations_response = requests.post(
+                            f"{API_URL}/recommend", 
+                            json=payload
+                        )
+                        
+                        if recommendations_response.status_code == 200:
+                            recommendations_data = recommendations_response.json()
+                            st.markdown("### Recommended Jobs for You")
+                            
+                            # Display each recommendation
+                            for recommendation in recommendations_data["top_job_recommendations"]:
+                                job_id = recommendation["job_id"]
+                                match_explanation = recommendation["match_explanation"]
+                                
+                                st.markdown(f"**Job ID:** {job_id}")
+                                st.markdown(f"**Match Explanation:** {match_explanation}")
+                                st.markdown("---")
+                        else:
+                            st.error("Failed to generate recommendations")
+                    except Exception as e:
+                        st.error(f"Error connecting to backend: {e}")
+    
+    # Analytics Tab
+    with tabs[2]:
         if 'jobs' in st.session_state and st.session_state.jobs:
             jobs = st.session_state.jobs
             
@@ -150,8 +235,9 @@ def main():
         else:
             st.info("No data available yet. Please run a search first.")
     
+    
     # About Tab
-    with tabs[2]:
+    with tabs[3]:
         st.header("About this application")
         st.write("""
         This Job Listings Scraper allows you to search for job postings across multiple job boards including Indeed, LinkedIn, and Glassdoor.
@@ -161,12 +247,14 @@ def main():
         - Filter by multiple job boards
         - View detailed job listings
         - Analyze job data with interactive visualizations
+        - AI-powered insights and recommendations (powered by Google's Gemini API)
         
         ### Technical Details:
         - **Frontend**: Streamlit
         - **Backend**: Flask
         - **Web Scraping**: Beautiful Soup, Requests
         - **Data Storage**: SQLite
+        - **AI Integration**: Google Gemini API
         
         ### Disclaimer:
         This application is for educational purposes only. Always respect the terms of service of the websites you scrape.
